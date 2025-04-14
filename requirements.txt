@@ -1,0 +1,11 @@
+mujoco>=2.3.3
+gymnasium[mujoco]
+gymnasium[other]
+numpy
+torch
+torchvision
+torchaudio
+torchsummary
+matplotlib
+seaborn
+tqdm
