@@ -1,64 +1,33 @@
-import gymnasium as gym
-import numpy as np
 import torch
 import pickle
+import argparse
 import os
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-from gymnasium.wrappers import RecordEpisodeStatistics, NormalizeObservation, NormalizeReward
-from typing import Any, SupportsFloat
-
-from agent import CheetahAgent
-
-
-# ---------------------
-# Environment functions
-# ---------------------
-
-def make_env(env_name: str, render_mode=None) -> gym.Env:
-    env = gym.make(env_name, render_mode=render_mode)
-    env = RecordEpisodeStatistics(env) # adds episode statistics to env.step return values
-    env = NormalizeObservation(env) # normalizes state observation (subtracting mean and dividing by variance)
-    env = NormalizeReward(env) # normalizes rewards by applying discount-based scaling (divides by the standard deviation of a rolling discounted sum of the rewards)
-    return env
-
-def make_vectorized_env(env_name: str, n_envs: int) -> gym.vector.SyncVectorEnv:
-    make_env_named = lambda : make_env(env_name)
-    return gym.vector.SyncVectorEnv([make_env_named for _ in range(n_envs)])
-
-def preprocess_env_step(
-    next_state: np.ndarray, 
-    reward: SupportsFloat, 
-    terminated: bool, 
-    truncated: bool, 
-    info: dict[str, Any]
-) -> tuple[np.ndarray, float, bool, dict[str, Any]]:
-    return (next_state, float(reward), (terminated or truncated), info)
-
-def preprocess_vectorized_env_step(
-    next_state: np.ndarray, 
-    reward: np.ndarray, 
-    terminated: np.ndarray, 
-    truncated: np.ndarray, 
-    info: dict[str, Any]
-) -> tuple[np.ndarray, np.ndarray, np.ndarray, dict[str, Any]]:
-    return (next_state, reward, np.logical_or(terminated, truncated), info)
+from argparse import Namespace
+from typing import Any
 
 
 # --------------------------
-# History tracking functions
+# History Tracking Functions
 # --------------------------
 
-def create_history(attributes: list[tuple[str, str, str]]) -> dict[str, list]:
-    return { attr_key: [] for attr_key, _, _ in attributes }
+def create_history(attributes: list[tuple[str, str, str]]) -> dict[str, dict[str, Any]]:
+    return { 
+        attr_key: { 
+            'attr_name': attr_name,
+            'delta_name': delta_name,
+            'values': []
+        } for attr_key, attr_name, delta_name in attributes 
+    }
 
-def add_to_history(history: dict[str, list], key: str, *values: float):
-    history[key] += values
+def add_to_history(history: dict[str, dict[str, Any]], key: str, *values: float):
+    history[key]['values'] += values
 
 def save_checkpoint(
-    agent: CheetahAgent, 
-    history: dict[str, list],  
+    agent: Any, 
+    history: dict[str, dict[str, Any]],  
     checkpoint_idx: int, 
     checkpoint_folder: str, 
     history_folder: str,
@@ -71,9 +40,24 @@ def save_checkpoint(
     with open(f'{history_folder}/history_{checkpoint_idx}.pkl', 'wb') as f:
         pickle.dump(history, f)
 
+def make_history_plots(
+    history: dict[str, dict[str, Any]], 
+    experiment_folder: str, 
+    fig_folder: str,
+):
+    for attr_key, attr_hist in history.items():
+        make_plot(
+            values=attr_hist['values'],
+            title=f'{attr_hist['attr_name']} vs. {attr_hist['delta_name']}',
+            xlabel=attr_hist['delta_name'],
+            ylabel=attr_hist['attr_name'],
+            fig_name=attr_key,
+            fig_folder=f'{experiment_folder}/{fig_folder}',
+        )
+
 
 # ----------------------------
-# Training arguments functions
+# Training Arguments Functions
 # ----------------------------
 
 def get_device(device_argument: str|None) -> torch.device:
@@ -88,22 +72,25 @@ def get_device(device_argument: str|None) -> torch.device:
 
 
 # -----------------------
-# Miscellaneous functions
-# ----------------
-
-def to_float_tensor(*arrays: np.ndarray) -> tuple[torch.Tensor, ...]:
-    return tuple(torch.tensor(arr, dtype=torch.float32) for arr in arrays)
+# Miscellaneous Functions
+# -----------------------
 
 def pad_number_representation(n: int, max_n: int) -> str:
     return str(n).zfill(len(str(max_n)))
 
-def make_plot(values: list[float], title: str, xlabel: str, ylabel: str, fig_name: str, fig_path: str):
-    os.makedirs(fig_path, exist_ok=True)
+def make_plot(values: list[float], title: str, xlabel: str, ylabel: str, fig_name: str, fig_folder: str):
+    os.makedirs(fig_folder, exist_ok=True)
     
     plt.figure(figsize=(10, 6))
     sns.lineplot(values, linewidth=1.2)
     plt.title(title)
     plt.xlabel(xlabel)
     plt.ylabel(ylabel)
-    plt.savefig(f'{fig_path}/{fig_name}', dpi=300)
+    plt.savefig(f'{fig_folder}/{fig_name}', dpi=300)
     plt.close()
+
+def get_arguments() -> Namespace:
+    arg_parser = argparse.ArgumentParser()
+    arg_parser.add_argument('--experiment_id', '-e', help='Experiment ID. Used to store artifacts from experiment in a specific folder.', type=str, required=True)
+    arg_parser.add_argument('--device', '-d', help='PyTorch device to use for tensor operations during training.', type=str, required=False)
+    return arg_parser.parse_args()
