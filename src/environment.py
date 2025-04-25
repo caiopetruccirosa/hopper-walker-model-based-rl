@@ -56,23 +56,3 @@ def make_env(env_name: str, healthy_reward: float, forward_reward_weight: float,
 def make_vectorized_env(env_name: str, n_envs: int, healthy_reward: float, forward_reward_weight: float, ctrl_cost_weight: float) -> gym.vector.SyncVectorEnv:
     make_env_named = lambda : make_env(env_name, healthy_reward, forward_reward_weight, ctrl_cost_weight, render_mode=None, is_recording=False)
     return gym.vector.SyncVectorEnv([make_env_named for _ in range(n_envs)])
-
-
-# ------------------------------------------
-# Play Recording Environment For One Episode
-# ------------------------------------------
-def play_recording_environment(env_name: str, agent: MBRLv1dot5Agent, video_folder: str, video_name_prefix: str):
-    os.makedirs(video_folder, exist_ok=True)
-    
-    env = make_env(env_name, healthy_reward=0, forward_reward_weight=0, ctrl_cost_weight=0, render_mode='rgb_array', is_recording=True)
-    env = RecordVideo(env, video_folder=video_folder, name_prefix=video_name_prefix, episode_trigger=lambda _: True)
-    
-    state, _ = env.reset()
-    done = False
-    while not done:
-        action = agent.choose_action(torch.FloatTensor(state))
-        next_state, _, terminated, truncated, _ = env.step(action)
-        done = terminated or truncated
-        state = next_state
-    
-    env.close()

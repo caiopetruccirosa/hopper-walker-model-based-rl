@@ -5,38 +5,41 @@ import numpy as np
 import random
 import os
 
+from gymnasium.wrappers import RecordVideo
 from tqdm import tqdm
 
 import config
 
 from mbrl1dot5_agent import MBRLv1dot5Agent
 from environment import (
+    make_env,
     make_vectorized_env,
-    play_recording_environment,
     ReplayBuffer,
 )
 from utils import (
     create_history,
     add_to_history,
     save_checkpoint,
-    get_device, 
     pad_number_representation, 
     make_history_plots,
     get_arguments,
+    get_device,
 )
 
 
-HIDDEN_DIM                = 128
-LR                        = 2.5e-4
+HIDDEN_DIM                = 64
+POLICY_LR                 = 3e-4
+DYNAMICS_LR               = 1e-4
 BATCH_SIZE                = 128
 EPOCH_BATCH_AMOUNT        = 10
-N_EXPLORATION_EPISODES    = 500
-N_EPISODES                = 2000
-TRAIN_FREQUENCY           = 100
+N_EXPLORATION_EPISODES    = 250
+N_EPISODES                = 1000
+DYNAMICS_TRAIN_FREQUENCY  = 500
 REPLAY_BUFFER_SIZE        = 100000
 N_CANDIDATES_ACTIONS      = 200
 PLANNING_LENGTH           = 5
-REWARD_LOSS_WEIGHT        = 0.5
+REWARD_LOSS_WEIGHT        = 0.1
+GAMMA                     = 0.99
 
 
 # ----------------
@@ -50,11 +53,11 @@ def train(agent: MBRLv1dot5Agent, checkpoint_folder: str, history_folder: str):
     history = create_history(
         attributes=[
             ('episode_reward_vs_num_episodes', 'Episode Reward', 'Number of Episodes'),
-            ('episode_length_vs_num_episodes', 'Episode Length', 'Number of Episodes'),
-            ('state_dynamics_loss_vs_num_update_steps', 'Agent\'s Dynamics Model State Loss', 'Number of Update Steps'),
-            ('reward_dynamics_loss_vs_num_update_steps', 'Agent\'s Dynamics Model Reward Loss', 'Number of Update Steps'),
-            ('total_dynamics_loss_vs_num_update_steps', 'Agent\'s Dynamics Model Total Loss', 'Number of Update Steps'),
-            ('lr_vs_num_episodes', 'Learning Rate', 'Number of Episodes'),
+            ('state_dynamics_loss_vs_num_dynupdate_steps', 'Agent\'s Dynamics Model State Loss', 'Number of Update Steps'),
+            ('reward_dynamics_loss_vs_num_dynupdate_steps', 'Agent\'s Dynamics Model Reward Loss', 'Number of Update Steps'),
+            ('total_dynamics_loss_vs_num_dynupdate_steps', 'Agent\'s Dynamics Model Total Loss', 'Number of Update Steps'),
+            ('policy_action_distribution_entropy_vs_num_episodes', 'Entropy of Policy Action Distribution', 'Number of Episodes'),
+            ('policy_model_loss_vs_num_polupdate_steps', 'Policy Model Loss', 'Number of Update Steps'),
         ],
     )
     
@@ -67,8 +70,9 @@ def train(agent: MBRLv1dot5Agent, checkpoint_folder: str, history_folder: str):
     )
 
     device = agent.device
-    buffer = ReplayBuffer(REPLAY_BUFFER_SIZE)
-    optimizer = optim.Adam(agent.env_dynamics_model.parameters(), lr=LR)
+    replay_buffer = ReplayBuffer(REPLAY_BUFFER_SIZE)
+    optimizer_policy = optim.Adam(agent.policy_model.parameters(), lr=POLICY_LR)
+    optimizer_dynamics = optim.Adam(agent.env_dynamics_model.parameters(), lr=DYNAMICS_LR)
 
     print('Exploration Episodes...')
     if not config.VERBOSE:
@@ -82,9 +86,9 @@ def train(agent: MBRLv1dot5Agent, checkpoint_folder: str, history_folder: str):
         dones = np.logical_or(terminateds, truncateds)
 
         # add environment transition of not done environments to replay buffer
-        buffer.add(
-            states=torch.FloatTensor(states[~dones, :]), 
-            actions=torch.FloatTensor(actions[~dones]), 
+        replay_buffer.add(
+            states=torch.FloatTensor(states[~dones, :]),
+            actions=torch.FloatTensor(actions[~dones]),
             next_states=torch.FloatTensor(next_states[~dones, :]),
             rewards=torch.FloatTensor(rewards[~dones]),
         )
@@ -93,47 +97,87 @@ def train(agent: MBRLv1dot5Agent, checkpoint_folder: str, history_folder: str):
         exploration_episodes_completed += sum(dones)
         if not config.VERBOSE:
             pbar.update(sum(dones))
+    pbar.close()
 
     print('\nTraining Episodes...')
     if not config.VERBOSE:
         pbar = tqdm(total=N_EPISODES)
     states, _ = envs.reset()
-    episodes_reward = []
+    episodes_acc_reward = np.zeros(shape=config.N_ENVS, dtype=float)
     dones = np.zeros(shape=config.N_ENVS, dtype=bool)
+    trajectory_buffer = [ [] for _ in range(config.N_ENVS) ]
     total_steps, episodes_completed = 0, 0
-    training_step_idx, checkpoint_idx = -1, -1
+    dyn_training_step_idx, checkpoint_idx = -1, -1
     while episodes_completed < N_EPISODES:
-        actions = agent.choose_action(torch.FloatTensor(states))
-        next_states, rewards, terminateds, truncateds, infos = envs.step(actions)
+        states_pt = torch.FloatTensor(states)
+
+        actions = agent.choose_action_learned_policy(states_pt).cpu()
+        next_states, rewards, terminateds, truncateds, _ = envs.step(actions.numpy())
         dones = np.logical_or(terminateds, truncateds)
 
+        next_states_pt = torch.FloatTensor(next_states)
+        rewards_pt = torch.FloatTensor(rewards)
+
         # add environment transition of not done environments to replay buffer
-        buffer.add(
-            states=torch.FloatTensor(states[~dones, :]), 
-            actions=torch.FloatTensor(actions[~dones]), 
-            next_states=torch.FloatTensor(next_states[~dones, :]),
-            rewards=torch.FloatTensor(rewards[~dones]),
+        replay_buffer.add(
+            states=states_pt[~dones, :],
+            actions=actions[~dones],
+            next_states=next_states_pt[~dones],
+            rewards=rewards_pt[~dones],
         )
 
+        # add entries to trajectories buffer
+        for i in range(config.N_ENVS):
+            trajectory_buffer[i].append((states_pt[i], actions[i], rewards_pt[i]))
+
         states = next_states
-        
-        # process finished episodes
-        if 'episode' in infos.keys():
-            current_episodes_completed = len(infos['episode']['r'])
-            episodes_completed += current_episodes_completed
-            episodes_reward = infos['episode']['r'].tolist()
+        episodes_acc_reward += rewards
 
-            # train policy model with REINFORCE
-            # TODO
+        # process finished episodes and train policy with REINFORCE
+        if sum(dones) > 0:
+            add_to_history(history, 'episode_reward_vs_num_episodes', *episodes_acc_reward[dones].tolist())
+            episodes_completed += sum(dones)
+            episodes_acc_reward[dones] = 0
 
-            add_to_history(history, 'episode_reward_vs_num_episodes', *(episodes_reward))
-            add_to_history(history, 'episode_length_vs_num_episodes', *(infos['episode']['l'].tolist()))
+            policy_loss = 0
+            for i in range(config.N_ENVS):
+                if dones[i]:
+                    t_states, t_actions, t_rewards = zip(*trajectory_buffer[i])
+                    t_states = torch.stack(t_states, dim=0).to(device)
+                    t_actions = torch.stack(t_actions, dim=0).to(device)
+                    t_rewards = torch.stack(t_rewards, dim=0).to(device)
+
+                    log_probs, entropy = agent.policy_model.get_action_logprobs_entropy(t_states, t_actions)
+
+                    R = 0
+                    returns = torch.zeros_like(t_rewards).to(device)
+                    for i in range(len(returns)-1, -1, -1):
+                        R = t_rewards[i] + GAMMA*R
+                        returns[i] = R
+                    returns = (returns - returns.mean()) / (returns.std() + 1e-8) # normalize returns
+                    
+                    # calculate policy loss
+                    policy_loss += (-log_probs * returns.detach()).mean()
+
+                    trajectory_buffer[i] = []
+                
+                    # add action distribution entropy to history
+                    add_to_history(history, 'policy_action_distribution_entropy_vs_num_episodes', entropy.mean().item())
+
+            # backpropagate once for all trajectories
+            if policy_loss != 0:
+                optimizer_policy.zero_grad()
+                policy_loss.backward() # type: ignore
+                optimizer_policy.step()
+
+                # add policy loss to history
+                add_to_history(history, 'policy_model_loss_vs_num_polupdate_steps', policy_loss.item())
 
         # train the dynamics model periodically
-        if total_steps//TRAIN_FREQUENCY > training_step_idx and len(buffer) >= BATCH_SIZE:
-            training_step_idx = total_steps//TRAIN_FREQUENCY
+        if total_steps//DYNAMICS_TRAIN_FREQUENCY > dyn_training_step_idx and len(replay_buffer) >= BATCH_SIZE:
+            dyn_training_step_idx = total_steps//DYNAMICS_TRAIN_FREQUENCY
             for _ in range(EPOCH_BATCH_AMOUNT):
-                sampled_states, sampled_actions, sampled_next_states, sampled_rewards = buffer.sample(BATCH_SIZE)
+                sampled_states, sampled_actions, sampled_next_states, sampled_rewards = replay_buffer.sample(BATCH_SIZE)
                 sampled_states = sampled_states.to(device)
                 sampled_actions = sampled_actions.to(device)
                 sampled_next_states = sampled_next_states.to(device)
@@ -142,18 +186,16 @@ def train(agent: MBRLv1dot5Agent, checkpoint_folder: str, history_folder: str):
                 pred_next_states, pred_rewards = agent.predict_transition(sampled_states, sampled_actions)
                 state_loss = F.mse_loss(pred_next_states, sampled_next_states)
                 reward_loss = F.mse_loss(pred_rewards.squeeze(-1), sampled_rewards)
-                loss = state_loss + REWARD_LOSS_WEIGHT*reward_loss
+                dyn_loss = state_loss + REWARD_LOSS_WEIGHT*reward_loss
 
-                optimizer.zero_grad()
-                loss.backward()
-                optimizer.step()
+                optimizer_dynamics.zero_grad()
+                dyn_loss.backward()
+                optimizer_dynamics.step()
 
-                add_to_history(history, 'state_dynamics_loss_vs_num_update_steps', loss.item())
-                add_to_history(history, 'reward_dynamics_loss_vs_num_update_steps', loss.item())
-                add_to_history(history, 'total_dynamics_loss_vs_num_update_steps', loss.item())
+                add_to_history(history, 'state_dynamics_loss_vs_num_dynupdate_steps', state_loss.item())
+                add_to_history(history, 'reward_dynamics_loss_vs_num_dynupdate_steps', reward_loss.item())
+                add_to_history(history, 'total_dynamics_loss_vs_num_dynupdate_steps', dyn_loss.item())
 
-        total_steps += config.N_ENVS
-        
         # save agent and history checkpoint
         if episodes_completed//config.CHECKPOINT_EPISODE_FREQUENCY > checkpoint_idx:
             checkpoint_idx = episodes_completed//config.CHECKPOINT_EPISODE_FREQUENCY
@@ -161,9 +203,12 @@ def train(agent: MBRLv1dot5Agent, checkpoint_folder: str, history_folder: str):
 
         if config.VERBOSE:
             print(f"[EPISODE {pad_number_representation(episodes_completed, N_EPISODES)}/{N_EPISODES}] \
-                  {'\t'.join(f'Reward {i}: {r:.2f}' for i, r in enumerate(episodes_reward, 1))}")
+                  {'\t'.join(f'Reward {i}: {r:.2f}' for i, r in enumerate(episodes_acc_reward[dones], 1))}")
         else:
             pbar.update(sum(dones))
+
+        total_steps += config.N_ENVS
+    pbar.close()
 
     envs.close()
 
@@ -171,6 +216,24 @@ def train(agent: MBRLv1dot5Agent, checkpoint_folder: str, history_folder: str):
 
     return agent, history
 
+# ------------------------------------------
+# Play Recording Environment For One Episode
+# ------------------------------------------
+def play_recording_environment(env_name: str, agent: MBRLv1dot5Agent, video_folder: str, video_name_prefix: str):
+    os.makedirs(video_folder, exist_ok=True)
+    
+    env = make_env(env_name, healthy_reward=0, forward_reward_weight=0, ctrl_cost_weight=0, render_mode='rgb_array', is_recording=True)
+    env = RecordVideo(env, video_folder=video_folder, name_prefix=video_name_prefix, episode_trigger=lambda _: True)
+    
+    state, _ = env.reset()
+    done = False
+    while not done:
+        action = agent.choose_action_learned_policy(torch.FloatTensor(state)).cpu()
+        next_state, _, terminated, truncated, _ = env.step(action.numpy())
+        done = terminated or truncated
+        state = next_state
+    
+    env.close()
 
 # ----
 # Main
