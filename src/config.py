@@ -13,7 +13,7 @@ CHECKPOINT_FOLDER = './checkpoint' # directory to store checkpoints
 HISTORY_FOLDER = './history'       # directory to store history dictionaries
 
 # Miscellaneous variables
-VERBOSE = False                     # flag to toggle verbose messages for debugging purposes
+VERBOSE = True                     # flag to toggle verbose messages for debugging purposes
 FIG_PATH = './fig'                 # directory to store figures, such as plots
 VIDEO_FOLDER = './video'           # directory to store a video recording of the agent in the environment
 VIDEO_NAME_PREFIX = 'hopper-agent' # name prefix of video recording of the agent in the environment
