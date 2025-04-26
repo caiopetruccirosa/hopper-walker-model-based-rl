@@ -25,7 +25,7 @@ from utils import (
 @dataclass
 class MBPOConfig:
     HIDDEN_DIM                 = 128
-    DYNAMICS_LR                = 1e-5
+    DYNAMICS_LR                = 1e-4
     POLICY_LR                  = 3e-4
     BATCH_SIZE                 = 64
     REPLAY_BUFFER_SIZE         = 100000
@@ -39,18 +39,20 @@ class MBPOConfig:
     DISCOUNT_FACTOR            = 0.99
     CRITIC_SOFT_UPDATE_FACTOR  = 0.995
     PLANNING_ROLLOUT_SIZE      = 100
-    PLANNING_LENGTH            = 10
+    MAX_PLANNING_LENGTH        = 50
+
 
 
 # ----------------
 # Training Process
 # ----------------
 
-def add_planning_rollout_to_buffer(agent: MBPOAgent, env_replay_buffer: ReplayBuffer, planning_replay_buffer: ReplayBuffer):
+def add_planning_rollout_to_buffer(agent: MBPOAgent, env_replay_buffer: ReplayBuffer, planning_replay_buffer: ReplayBuffer, epoch: int):
     states, _, _, _, _ = env_replay_buffer.sample(MBPOConfig.PLANNING_ROLLOUT_SIZE)
     states = states.to(agent.device)
     
-    for _ in range(MBPOConfig.PLANNING_LENGTH):
+    planning_length = int(MBPOConfig.MAX_PLANNING_LENGTH * (epoch/MBPOConfig.N_EPOCHS))
+    for _ in range(planning_length):
         with torch.no_grad():
             actions, _ = agent.choose_action(states)
             next_states, rewards = agent.predict_transition(states, actions)
@@ -238,7 +240,7 @@ def train(agent: MBPOAgent, checkpoint_folder: str, history_folder: str):
 
             # generate planning rollout to add to replay experience buffer
             if len(env_replay_buffer) >= MBPOConfig.PLANNING_ROLLOUT_SIZE:
-                add_planning_rollout_to_buffer(agent, env_replay_buffer, planning_replay_buffer)
+                add_planning_rollout_to_buffer(agent, env_replay_buffer, planning_replay_buffer, epoch)
 
 
             # optimize agent's policy
