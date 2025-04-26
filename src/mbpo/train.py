@@ -24,10 +24,10 @@ from utils import (
 
 @dataclass
 class MBPOConfig:
-    HIDDEN_DIM                  = 256
-    DYNAMICS_LR                 = 3e-5
-    POLICY_LR                   = 1e-4
-    BATCH_SIZE                  = 128
+    HIDDEN_DIM                  = 128
+    DYNAMICS_LR                 = 1e-4
+    POLICY_LR                   = 3e-4
+    BATCH_SIZE                  = 64
     REPLAY_BUFFER_SIZE          = 100000
     N_EPOCHS                    = 125
     N_EXPLORATION_STEPS         = 500
@@ -220,6 +220,7 @@ def train(agent: MBPOAgent, checkpoint_folder: str, history_folder: str):
     states, _ = envs.reset()
     dones = np.zeros(shape=config.N_ENVS, dtype=bool)
     episodes_acc_reward = np.zeros(shape=config.N_ENVS, dtype=float)
+    episodes_length = np.zeros(shape=config.N_ENVS, dtype=float)
 
     print('Training...')
     for epoch in tqdm(range(MBPOConfig.N_EPOCHS)):
@@ -273,7 +274,9 @@ def train(agent: MBPOAgent, checkpoint_folder: str, history_folder: str):
             if sum(dones) > 0:
                 if config.VERBOSE:
                     print('\t'.join(f'Reward {i}: {r:.2f}' for i, r in enumerate(episodes_acc_reward[dones], 1)))
+                add_to_history(history, 'episode_length_vs_num_episodes', *episodes_length[dones].tolist())
                 add_to_history(history, 'episode_reward_vs_num_episodes', *episodes_acc_reward[dones].tolist())
+                episodes_length[dones] = 0
                 episodes_acc_reward[dones] = 0
 
             training_steps += config.N_ENVS
