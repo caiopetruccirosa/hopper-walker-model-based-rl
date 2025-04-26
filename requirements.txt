@@ -2,6 +2,7 @@ mujoco>=2.3.3
 gymnasium[mujoco]
 gymnasium[other]
 numpy
+pandas
 torch
 torchvision
 torchaudio

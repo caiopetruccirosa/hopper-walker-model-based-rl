@@ -77,16 +77,19 @@ def main():
             history_folder=f'{experiment_folder}/{config.HISTORY_FOLDER}',
         )
 
+    # import pickle
+    # with open('experiments/mbrlv1dot5/v9/history/history_6.pkl', 'rb') as f:
+    #     history = pickle.load(f)
+
     make_history_plots(
         history=history,
-        experiment_folder='experiments/mbrlv1dot5/v9',
-        fig_folder=config.FIG_PATH,
+        fig_folder=f'{experiment_folder}/{config.VIDEO_FOLDER}',
     )
 
     play_recording_environment(
         env_name=config.ENV_NAME,
         agent=agent,
-        video_folder=f'experiments/mbrlv1dot5/v9/{config.VIDEO_FOLDER}',
+        video_folder=f'{experiment_folder}/{config.VIDEO_FOLDER}',
         video_name_prefix=config.VIDEO_NAME_PREFIX,
     )
 

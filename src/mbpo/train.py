@@ -24,22 +24,27 @@ from utils import (
 
 @dataclass
 class MBPOConfig:
-    HIDDEN_DIM                 = 128
-    DYNAMICS_LR                = 1e-4
-    POLICY_LR                  = 3e-4
-    BATCH_SIZE                 = 64
-    REPLAY_BUFFER_SIZE         = 100000
-    N_EPOCHS                   = 125
-    N_EXPLORATION_STEPS        = 1000
-    N_TRAINING_STEPS_PER_EPOCH = 1000
-    N_POLICY_UPDATES           = 10
-    N_DYNAMICS_MODEL_UPDATES   = 10
-    N_DYNAMICS_MODELS          = 10
-    REWARD_LOSS_WEIGHT         = 0.25
-    DISCOUNT_FACTOR            = 0.99
-    CRITIC_SOFT_UPDATE_FACTOR  = 0.995
-    PLANNING_ROLLOUT_SIZE      = 100
-    MAX_PLANNING_LENGTH        = 50
+    HIDDEN_DIM                  = 64
+    DYNAMICS_LR                 = 3e-5
+    POLICY_LR                   = 1e-4
+    BATCH_SIZE                  = 128
+    REPLAY_BUFFER_SIZE          = 100000
+    N_EPOCHS                    = 125
+    N_EXPLORATION_STEPS         = 500
+    N_TRAINING_STEPS_PER_EPOCH  = 1000
+    N_POLICY_UPDATES            = 20
+    N_DYNAMICS_MODEL_UPDATES    = 10
+    N_DYNAMICS_MODELS           = 5
+    REWARD_LOSS_WEIGHT          = 0.25
+    DISCOUNT_FACTOR             = 0.99
+    CRITIC_SOFT_UPDATE_FACTOR   = 0.995
+    PLANNING_ROLLOUT_SIZE       = 100
+    MIN_PLANNING_LENGTH         = 1
+    MAX_PLANNING_LENGTH         = 15
+    EPOCH_START_PLANNING_GROWTH = 20
+    EPOCH_END_PLANNING_GROWTH   = 100
+    MAX_PLANNING_LENGTH         = 15
+    WEIGHT_DECAY                = 1e-4
 
 
 
@@ -47,11 +52,18 @@ class MBPOConfig:
 # Training Process
 # ----------------
 
+def calculate_planning_length(epoch: int) -> int:
+    planning_length_interval = MBPOConfig.MAX_PLANNING_LENGTH - MBPOConfig.MIN_PLANNING_LENGTH
+    epochs_interval = MBPOConfig.EPOCH_END_PLANNING_GROWTH - MBPOConfig.EPOCH_START_PLANNING_GROWTH
+    current_epoch_offset = epoch - MBPOConfig.EPOCH_START_PLANNING_GROWTH
+    ratio = current_epoch_offset/epochs_interval
+    return min(max(int(MBPOConfig.MIN_PLANNING_LENGTH + ratio*planning_length_interval), MBPOConfig.MIN_PLANNING_LENGTH), MBPOConfig.MAX_PLANNING_LENGTH)
+
 def add_planning_rollout_to_buffer(agent: MBPOAgent, env_replay_buffer: ReplayBuffer, planning_replay_buffer: ReplayBuffer, epoch: int):
     states, _, _, _, _ = env_replay_buffer.sample(MBPOConfig.PLANNING_ROLLOUT_SIZE)
     states = states.to(agent.device)
     
-    planning_length = int(MBPOConfig.MAX_PLANNING_LENGTH * (epoch/MBPOConfig.N_EPOCHS))
+    planning_length = calculate_planning_length(epoch)
     for _ in range(planning_length):
         with torch.no_grad():
             actions, _ = agent.choose_action(states)
@@ -154,13 +166,13 @@ def train(agent: MBPOAgent, checkpoint_folder: str, history_folder: str):
 
     history = create_history(
         attributes=[
-            ('episode_reward_vs_num_episodes', 'Episode Reward', 'Number of Episodes'),
-            ('policy_critic_loss_vs_num_polupdate_steps', 'Agent\'s Policy Critic Loss', 'Number of Update Steps'),
-            ('policy_actor_loss_vs_num_polupdate_steps', 'Agent\'s Policy Actor Loss', 'Number of Update Steps'),
-            ('policy_alpha_loss_vs_num_polupdate_steps', 'Agent\'s Policy Alpha Loss', 'Number of Update Steps'),
-            ('state_dynamics_loss_vs_num_dynupdate_steps', 'Agent\'s Dynamics Model State Loss', 'Number of Update Steps'),
-            ('reward_dynamics_loss_vs_num_dynupdate_steps', 'Agent\'s Dynamics Model Reward Loss', 'Number of Update Steps'),
-            ('total_dynamics_loss_vs_num_dynupdate_steps', 'Agent\'s Dynamics Model Total Loss', 'Number of Update Steps'),
+            ('episode_reward_vs_num_episodes', 'Episode Reward', 'Number of Episodes', True),
+            ('policy_critic_loss_vs_num_polupdate_steps', 'Agent\'s Policy Critic Loss', 'Number of Update Steps', False),
+            ('policy_actor_loss_vs_num_polupdate_steps', 'Agent\'s Policy Actor Loss', 'Number of Update Steps', False),
+            ('policy_alpha_loss_vs_num_polupdate_steps', 'Agent\'s Policy Alpha Loss', 'Number of Update Steps', False),
+            ('state_dynamics_loss_vs_num_dynupdate_steps', 'Agent\'s Dynamics Model State Loss', 'Number of Update Steps', False),
+            ('reward_dynamics_loss_vs_num_dynupdate_steps', 'Agent\'s Dynamics Model Reward Loss', 'Number of Update Steps', False),
+            ('total_dynamics_loss_vs_num_dynupdate_steps', 'Agent\'s Dynamics Model Total Loss', 'Number of Update Steps', False),
         ],
     )
     
@@ -178,10 +190,10 @@ def train(agent: MBPOAgent, checkpoint_folder: str, history_folder: str):
     env_replay_buffer = ReplayBuffer(MBPOConfig.REPLAY_BUFFER_SIZE)
     planning_replay_buffer = ReplayBuffer(MBPOConfig.REPLAY_BUFFER_SIZE)
 
-    optimizer_dynamics = optim.Adam(agent.env_dynamics_model.parameters(), lr=MBPOConfig.DYNAMICS_LR)
-    optimizer_actor = optim.Adam(agent.actor.parameters(), lr=MBPOConfig.POLICY_LR)
-    optimizer_critic = optim.Adam(agent.critic.parameters(), lr=MBPOConfig.POLICY_LR)
-    optimizer_alpha = optim.Adam([agent.log_alpha], lr=MBPOConfig.POLICY_LR)
+    optimizer_dynamics = optim.Adam(agent.env_dynamics_model.parameters(), lr=MBPOConfig.DYNAMICS_LR, weight_decay=MBPOConfig.WEIGHT_DECAY)
+    optimizer_actor = optim.Adam(agent.actor.parameters(), lr=MBPOConfig.POLICY_LR, weight_decay=MBPOConfig.WEIGHT_DECAY)
+    optimizer_critic = optim.Adam(agent.critic.parameters(), lr=MBPOConfig.POLICY_LR, weight_decay=MBPOConfig.WEIGHT_DECAY)
+    optimizer_alpha = optim.Adam([agent.log_alpha], lr=MBPOConfig.POLICY_LR, weight_decay=MBPOConfig.WEIGHT_DECAY)
 
     # exploration steps
     states, _ = envs.reset()

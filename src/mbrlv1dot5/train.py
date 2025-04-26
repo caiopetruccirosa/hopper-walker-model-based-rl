@@ -23,16 +23,17 @@ from utils import (
 @dataclass
 class MBRLv1do5Config:
     HIDDEN_DIM                = 128
-    DYNAMICS_LR               = 1e-5
+    DYNAMICS_LR               = 3e-5
     BATCH_SIZE                = 128
     N_DYNAMICS_MODEL_UPDATES  = 10
-    N_EXPLORATION_EPISODES    = 200
+    N_EXPLORATION_EPISODES    = 50
     N_EPISODES                = 500
     DYNAMICS_UPDATE_FREQUENCY = 100
     REPLAY_BUFFER_SIZE        = 100000
     N_CANDIDATES_ACTIONS      = 400
     PLANNING_LENGTH           = 20
     REWARD_LOSS_WEIGHT        = 0.25
+    WEIGHT_DECAY              = 1e-4
 
 
 # ----------------
@@ -45,10 +46,11 @@ def train(agent: MBRLv1dot5Agent, checkpoint_folder: str, history_folder: str):
 
     history = create_history(
         attributes=[
-            ('episode_reward_vs_num_episodes', 'Episode Reward', 'Number of Episodes'),
-            ('state_dynamics_loss_vs_num_dynupdate_steps', 'Agent\'s Dynamics Model State Loss', 'Number of Update Steps'),
-            ('reward_dynamics_loss_vs_num_dynupdate_steps', 'Agent\'s Dynamics Model Reward Loss', 'Number of Update Steps'),
-            ('total_dynamics_loss_vs_num_dynupdate_steps', 'Agent\'s Dynamics Model Total Loss', 'Number of Update Steps'),
+            ('episode_reward_vs_num_episodes', 'Episode Reward', 'Number of Episodes', True),
+            ('episode_length_vs_num_episodes', 'Episode Length', 'Number of Episodes', True),
+            ('state_dynamics_loss_vs_num_dynupdate_steps', 'Agent\'s Dynamics Model State Loss', 'Number of Update Steps', True),
+            ('reward_dynamics_loss_vs_num_dynupdate_steps', 'Agent\'s Dynamics Model Reward Loss', 'Number of Update Steps', True),
+            ('total_dynamics_loss_vs_num_dynupdate_steps', 'Agent\'s Dynamics Model Total Loss', 'Number of Update Steps', True),
         ],
     )
     
@@ -62,7 +64,11 @@ def train(agent: MBRLv1dot5Agent, checkpoint_folder: str, history_folder: str):
 
     device = agent.device
     replay_buffer = ReplayBuffer(MBRLv1do5Config.REPLAY_BUFFER_SIZE)
-    optimizer_dynamics = optim.Adam(agent.env_dynamics_model.parameters(), lr=MBRLv1do5Config.DYNAMICS_LR)
+    optimizer_dynamics = optim.Adam(
+        agent.env_dynamics_model.parameters(), 
+        lr=MBRLv1do5Config.DYNAMICS_LR, 
+        weight_decay=MBRLv1do5Config.WEIGHT_DECAY,
+    )
 
     pbar = tqdm(total=MBRLv1do5Config.N_EXPLORATION_EPISODES)
     exploration_episodes_completed = 0
@@ -95,9 +101,11 @@ def train(agent: MBRLv1dot5Agent, checkpoint_folder: str, history_folder: str):
     states, _ = envs.reset()
     dones = np.zeros(shape=config.N_ENVS, dtype=bool)
     episodes_acc_reward = np.zeros(shape=config.N_ENVS, dtype=float)
+    episodes_length = np.zeros(shape=config.N_ENVS, dtype=float)
 
     print('\nTraining Episodes...')
     while episodes_completed < MBRLv1do5Config.N_EPISODES:
+        episodes_length += 1
         states_pt = torch.FloatTensor(states)
 
         actions = agent.choose_action(states_pt.to(device)).cpu()
@@ -118,11 +126,12 @@ def train(agent: MBRLv1dot5Agent, checkpoint_folder: str, history_folder: str):
 
         # process finished episodes and train policy with REINFORCE
         if sum(dones) > 0:
-            add_to_history(history, 'episode_reward_vs_num_episodes', *episodes_acc_reward[dones].tolist())
+            add_to_history(history, 'episode_reward_vs_num_episodes', *episodes_length[dones].tolist())
+            add_to_history(history, 'episode_length_vs_num_episodes', *episodes_acc_reward[dones].tolist())
             episodes_completed += sum(dones)
             if config.VERBOSE:
-                print(f"[EPISODE {pad_number_representation(episodes_completed, MBRLv1do5Config.N_EPISODES)}/{MBRLv1do5Config.N_EPISODES}] \
-                    {'\t'.join(f'Reward {i}: {r:.2f}' for i, r in enumerate(episodes_acc_reward[dones], 1))}")
+                print(f"[EPISODE {pad_number_representation(episodes_completed, MBRLv1do5Config.N_EPISODES)}/{MBRLv1do5Config.N_EPISODES}] \t Reward: {episodes_acc_reward[dones].mean():.2f}")
+            episodes_length[dones] = 0
             episodes_acc_reward[dones] = 0
 
         # train the dynamics model periodically
