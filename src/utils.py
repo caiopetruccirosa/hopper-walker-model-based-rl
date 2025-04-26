@@ -91,6 +91,7 @@ def make_plot(values: list[float], title: str, xlabel: str, ylabel: str, fig_nam
 
 def get_arguments() -> Namespace:
     arg_parser = argparse.ArgumentParser()
+    arg_parser.add_argument('--method', '-m', help='Method/algorithm to use for agent.', type=str, required=True, choices=['mbrlv1dot5', 'mbpo'])
     arg_parser.add_argument('--experiment_id', '-e', help='Experiment ID. Used to store artifacts from experiment in a specific folder.', type=str, required=True)
     arg_parser.add_argument('--device', '-d', help='PyTorch device to use for tensor operations during training.', type=str, required=False)
     return arg_parser.parse_args()

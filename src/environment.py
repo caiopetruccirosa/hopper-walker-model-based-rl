@@ -5,13 +5,14 @@ import os
 
 from gymnasium.wrappers import (
     RecordEpisodeStatistics, 
-    # NormalizeObservation, 
-    # NormalizeReward, 
+    NormalizeObservation, 
+    NormalizeReward, 
     RecordVideo,
 )
 from collections import deque
 
-from mbrl1dot5_agent import MBRLv1dot5Agent
+from mbrlv1dot5.agent import MBRLv1dot5Agent
+from mbpo.agent import MBPOAgent
 
 
 # ----------------------------
@@ -21,19 +22,45 @@ class ReplayBuffer:
     def __init__(self, capacity: int):
         self.buffer = deque(maxlen=capacity)
     
-    def add(self, states: torch.Tensor, actions: torch.Tensor, next_states: torch.Tensor, rewards: torch.Tensor):
-        self.buffer.extend(zip(states, actions, next_states, rewards))
+    def add(self, states: torch.Tensor, actions: torch.Tensor, next_states: torch.Tensor, rewards: torch.Tensor, dones: torch.Tensor):
+        self.buffer.extend(zip(states, actions, next_states, rewards, dones))
     
-    def sample(self, batch_size: int) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-        states, actions, next_states, rewards = zip(*random.sample(self.buffer, batch_size))
+    def sample(self, batch_size: int) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+        states, actions, next_states, rewards, dones = zip(*random.sample(self.buffer, batch_size))
         states = torch.stack(states, dim=0)
         actions = torch.stack(actions, dim=0)
         next_states = torch.stack(next_states, dim=0)
         rewards = torch.stack(rewards, dim=0)
-        return states, actions, next_states, rewards
+        dones = torch.stack(dones, dim=0)
+        return states, actions, next_states, rewards, dones
     
     def __len__(self):
         return len(self.buffer)
+
+
+# ------------------------------------------
+# Play Recording Environment For One Episode
+# ------------------------------------------
+def play_recording_environment(env_name: str, agent: MBRLv1dot5Agent|MBPOAgent, video_folder: str, video_name_prefix: str):
+    os.makedirs(video_folder, exist_ok=True)
+    
+    env = make_env(env_name, healthy_reward=0, forward_reward_weight=0, ctrl_cost_weight=0, render_mode='rgb_array', is_recording=True)
+    env = RecordVideo(env, video_folder=video_folder, name_prefix=video_name_prefix, episode_trigger=lambda _: True)
+    
+    state, _ = env.reset()
+    done = False
+    while not done:
+        state_pt = torch.FloatTensor(state).to(agent.device)
+        if type(agent) is MBRLv1dot5Agent:
+            action = agent.choose_action(state_pt).cpu()
+        elif type(agent) is MBPOAgent:
+            action, _ = agent.choose_action(state_pt)
+            action = action.cpu()
+        next_state, _, terminated, truncated, _ = env.step(action.numpy())
+        done = terminated or truncated
+        state = next_state
+    
+    env.close()
 
 
 # --------------------------
@@ -49,8 +76,8 @@ def make_env(env_name: str, healthy_reward: float, forward_reward_weight: float,
         render_mode=render_mode,
     )
     env = RecordEpisodeStatistics(env) # adds episode statistics to env.step return values
-    # env = NormalizeObservation(env)    # normalizes state observation (subtracting mean and dividing by variance)
-    # env = NormalizeReward(env)         # normalizes rewards by applying discount-based scaling (divides by the standard deviation of a rolling discounted sum of the rewards)
+    env = NormalizeObservation(env)    # normalizes state observation (subtracting mean and dividing by variance)
+    env = NormalizeReward(env)         # normalizes rewards by applying discount-based scaling (divides by the standard deviation of a rolling discounted sum of the rewards)
     return env
 
 def make_vectorized_env(env_name: str, n_envs: int, healthy_reward: float, forward_reward_weight: float, ctrl_cost_weight: float) -> gym.vector.SyncVectorEnv:
