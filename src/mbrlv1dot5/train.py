@@ -22,18 +22,18 @@ from utils import (
 
 @dataclass
 class MBRLv1do5Config:
-    HIDDEN_DIM                = 128
-    DYNAMICS_LR               = 3e-5
+    HIDDEN_DIM                = 256
+    DYNAMICS_LR               = 1e-4
     BATCH_SIZE                = 128
     N_DYNAMICS_MODEL_UPDATES  = 10
-    N_EXPLORATION_EPISODES    = 50
+    N_EXPLORATION_EPISODES    = 100
     N_EPISODES                = 500
     DYNAMICS_UPDATE_FREQUENCY = 100
     REPLAY_BUFFER_SIZE        = 100000
     N_CANDIDATES_ACTIONS      = 400
     PLANNING_LENGTH           = 20
     REWARD_LOSS_WEIGHT        = 0.25
-    WEIGHT_DECAY              = 1e-4
+    WEIGHT_DECAY              = 1e-6
 
 
 # ----------------
@@ -47,10 +47,10 @@ def train(agent: MBRLv1dot5Agent, checkpoint_folder: str, history_folder: str):
     history = create_history(
         attributes=[
             ('episode_reward_vs_num_episodes', 'Episode Reward', 'Number of Episodes', True),
-            ('episode_length_vs_num_episodes', 'Episode Length', 'Number of Episodes', True),
-            ('state_dynamics_loss_vs_num_dynupdate_steps', 'Agent\'s Dynamics Model State Loss', 'Number of Update Steps', True),
-            ('reward_dynamics_loss_vs_num_dynupdate_steps', 'Agent\'s Dynamics Model Reward Loss', 'Number of Update Steps', True),
-            ('total_dynamics_loss_vs_num_dynupdate_steps', 'Agent\'s Dynamics Model Total Loss', 'Number of Update Steps', True),
+            ('episode_length_vs_num_episodes', 'Episode Length', 'Number of Episodes', False),
+            ('state_dynamics_loss_vs_num_dynupdate_steps', 'Agent\'s Dynamics Model State Loss', 'Number of Update Steps', False),
+            ('reward_dynamics_loss_vs_num_dynupdate_steps', 'Agent\'s Dynamics Model Reward Loss', 'Number of Update Steps', False),
+            ('total_dynamics_loss_vs_num_dynupdate_steps', 'Agent\'s Dynamics Model Total Loss', 'Number of Update Steps', False),
         ],
     )
     
@@ -126,8 +126,8 @@ def train(agent: MBRLv1dot5Agent, checkpoint_folder: str, history_folder: str):
 
         # process finished episodes and train policy with REINFORCE
         if sum(dones) > 0:
-            add_to_history(history, 'episode_reward_vs_num_episodes', *episodes_length[dones].tolist())
-            add_to_history(history, 'episode_length_vs_num_episodes', *episodes_acc_reward[dones].tolist())
+            add_to_history(history, 'episode_length_vs_num_episodes', *episodes_length[dones].tolist())
+            add_to_history(history, 'episode_reward_vs_num_episodes', *episodes_acc_reward[dones].tolist())
             episodes_completed += sum(dones)
             if config.VERBOSE:
                 print(f"[EPISODE {pad_number_representation(episodes_completed, MBRLv1do5Config.N_EPISODES)}/{MBRLv1do5Config.N_EPISODES}] \t Reward: {episodes_acc_reward[dones].mean():.2f}")

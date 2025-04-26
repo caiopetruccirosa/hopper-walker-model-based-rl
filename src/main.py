@@ -83,7 +83,7 @@ def main():
 
     make_history_plots(
         history=history,
-        fig_folder=f'{experiment_folder}/{config.VIDEO_FOLDER}',
+        fig_folder=f'{experiment_folder}/{config.FIG_PATH}',
     )
 
     play_recording_environment(

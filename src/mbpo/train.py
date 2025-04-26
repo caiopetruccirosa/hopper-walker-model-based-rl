@@ -24,7 +24,7 @@ from utils import (
 
 @dataclass
 class MBPOConfig:
-    HIDDEN_DIM                  = 64
+    HIDDEN_DIM                  = 256
     DYNAMICS_LR                 = 3e-5
     POLICY_LR                   = 1e-4
     BATCH_SIZE                  = 128
@@ -44,7 +44,7 @@ class MBPOConfig:
     EPOCH_START_PLANNING_GROWTH = 20
     EPOCH_END_PLANNING_GROWTH   = 100
     MAX_PLANNING_LENGTH         = 15
-    WEIGHT_DECAY                = 1e-4
+    WEIGHT_DECAY                = 1e-6
 
 
 

@@ -99,15 +99,16 @@ def make_plot(
 ):
     os.makedirs(fig_folder, exist_ok=True)
     
-    window_size = len(values)//25
-    x = np.arange(len(values))
-
-    series = pd.Series(values)
-    rolling_avg = series.rolling(window=window_size, center=True, min_periods=1).mean()
-    rolling_std = series.rolling(window=window_size, center=True, min_periods=1).std()
-
     plt.figure(figsize=(10, 6))
+
     if plot_rolling_avg:
+        window_size = len(values)//25
+        x = np.arange(len(values))
+        
+        series = pd.Series(values)
+        rolling_avg = series.rolling(window=window_size, center=True, min_periods=1).mean()
+        rolling_std = series.rolling(window=window_size, center=True, min_periods=1).std()
+        
         sns.lineplot(x=x, y=values, linewidth=0.5, alpha=0.4, color='tab:blue')
         sns.lineplot(x=x, y=rolling_avg, linewidth=1.5, color='tab:blue')
         plt.fill_between(x, rolling_avg - rolling_std, rolling_avg + rolling_std, alpha=0.15, color='tab:blue')
