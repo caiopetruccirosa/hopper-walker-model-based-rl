@@ -237,7 +237,7 @@ def train(agent: MBPOAgent, checkpoint_folder: str, history_folder: str):
             episodes_acc_reward += rewards
 
             # generate planning rollout to add to replay experience buffer
-            if len(env_replay_buffer) >= MBPOConfig.AGENT_ROLLOUT_AMOUNT:
+            if len(env_replay_buffer) >= MBPOConfig.PLANNING_ROLLOUT_SIZE:
                 add_planning_rollout_to_buffer(agent, env_replay_buffer, planning_replay_buffer)
 
 
