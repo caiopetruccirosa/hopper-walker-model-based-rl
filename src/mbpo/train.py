@@ -76,7 +76,7 @@ def optimize_agent_policy(
     history: dict[str, dict[str, Any]],
 ):
     env_states, env_actions, env_next_states, env_rewards, env_dones = env_replay_buffer.sample(MBPOConfig.BATCH_SIZE//2)
-    planning_states, planning_actions, planning_next_states, planning_rewards, planning_dones = planning_replay_buffer.sample(BATCH_SIZE//2)
+    planning_states, planning_actions, planning_next_states, planning_rewards, planning_dones = planning_replay_buffer.sample(MBPOConfig.BATCH_SIZE//2)
     
     states = torch.cat([env_states, planning_states], dim=0).to(agent.device)
     actions = torch.cat([env_actions, planning_actions], dim=0).to(agent.device)
