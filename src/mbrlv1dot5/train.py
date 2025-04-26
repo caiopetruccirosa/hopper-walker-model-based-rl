@@ -23,12 +23,12 @@ from utils import (
 @dataclass
 class MBRLv1do5Config:
     HIDDEN_DIM                = 128
-    DYNAMICS_LR               = 3e-4
+    DYNAMICS_LR               = 1e-4
     BATCH_SIZE                = 128
     N_DYNAMICS_MODEL_UPDATES  = 10
     N_EXPLORATION_EPISODES    = 1000
     N_EPISODES                = 1000
-    DYNAMICS_UPDATE_FREQUENCY = 50
+    DYNAMICS_UPDATE_FREQUENCY = 500
     REPLAY_BUFFER_SIZE        = 100000
     N_CANDIDATES_ACTIONS      = 400
     PLANNING_LENGTH           = 20

@@ -5,8 +5,6 @@ import os
 
 from gymnasium.wrappers import (
     RecordEpisodeStatistics, 
-    NormalizeObservation, 
-    NormalizeReward, 
     RecordVideo,
 )
 from collections import deque
@@ -76,8 +74,6 @@ def make_env(env_name: str, healthy_reward: float, forward_reward_weight: float,
         render_mode=render_mode,
     )
     env = RecordEpisodeStatistics(env) # adds episode statistics to env.step return values
-    env = NormalizeObservation(env)    # normalizes state observation (subtracting mean and dividing by variance)
-    env = NormalizeReward(env)         # normalizes rewards by applying discount-based scaling (divides by the standard deviation of a rolling discounted sum of the rewards)
     return env
 
 def make_vectorized_env(env_name: str, n_envs: int, healthy_reward: float, forward_reward_weight: float, ctrl_cost_weight: float) -> gym.vector.SyncVectorEnv:
