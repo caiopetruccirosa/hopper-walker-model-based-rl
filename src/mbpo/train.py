@@ -167,6 +167,7 @@ def train(agent: MBPOAgent, checkpoint_folder: str, history_folder: str):
     history = create_history(
         attributes=[
             ('episode_reward_vs_num_episodes', 'Episode Reward', 'Number of Episodes', True),
+            ('episode_length_vs_num_episodes', 'Episode Length', 'Number of Episodes', False),
             ('policy_critic_loss_vs_num_polupdate_steps', 'Agent\'s Policy Critic Loss', 'Number of Update Steps', False),
             ('policy_actor_loss_vs_num_polupdate_steps', 'Agent\'s Policy Actor Loss', 'Number of Update Steps', False),
             ('policy_alpha_loss_vs_num_polupdate_steps', 'Agent\'s Policy Alpha Loss', 'Number of Update Steps', False),
