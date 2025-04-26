@@ -4,9 +4,13 @@ import argparse
 import os
 import matplotlib.pyplot as plt
 import seaborn as sns
+import copy
 
 from argparse import Namespace
 from typing import Any
+
+from mbrlv1dot5.agent import MBRLv1dot5Agent
+from mbpo.agent import MBPOAgent
 
 
 # --------------------------
@@ -26,7 +30,7 @@ def add_to_history(history: dict[str, dict[str, Any]], key: str, *values: float)
     history[key]['values'] += values
 
 def save_checkpoint(
-    agent: Any, 
+    agent: MBRLv1dot5Agent|MBPOAgent, 
     history: dict[str, dict[str, Any]],  
     checkpoint_idx: int, 
     checkpoint_folder: str, 
@@ -34,6 +38,9 @@ def save_checkpoint(
 ):
     os.makedirs(checkpoint_folder, exist_ok=True)
     os.makedirs(history_folder, exist_ok=True)
+
+    agent = copy.deepcopy(agent)
+    agent = agent.to_device(torch.device('cpu'))
 
     with open(f'{checkpoint_folder}/agent_chkpt_{checkpoint_idx}.pkl', 'wb') as f:
         pickle.dump(agent, f)

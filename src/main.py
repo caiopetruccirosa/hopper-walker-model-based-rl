@@ -34,59 +34,48 @@ def main():
     torch.manual_seed(42)
     np.random.seed(42)
 
-    # args = get_arguments()
+    args = get_arguments()
 
-    # experiment_folder = f'experiments/{args.method}/{args.experiment_id}'
-    # os.makedirs(experiment_folder, exist_ok=True)
+    experiment_folder = f'experiments/{args.method}/{args.experiment_id}'
+    os.makedirs(experiment_folder, exist_ok=True)
 
-    # device = get_device(args.device)
+    device = get_device(args.device)
     
-    # if args.method == 'mbrlv1dot5':
-    #     print('Agent based on Model-based RL v1.5 algorithm')
+    if args.method == 'mbrlv1dot5':
+        print('Agent based on Model-based RL v1.5 algorithm')
 
-    #     agent = MBRLv1dot5Agent(
-    #         state_dim=config.STATE_DIM,
-    #         action_dim=config.ACTION_DIM,
-    #         hidden_dim=MBRLv1do5Config.HIDDEN_DIM,
-    #         planning_length=MBRLv1do5Config.PLANNING_LENGTH,
-    #         n_candidate_actions=MBRLv1do5Config.N_CANDIDATES_ACTIONS,
-    #         device=device,
-    #         verbose=config.VERBOSE,
-    #     )
+        agent = MBRLv1dot5Agent(
+            state_dim=config.STATE_DIM,
+            action_dim=config.ACTION_DIM,
+            hidden_dim=MBRLv1do5Config.HIDDEN_DIM,
+            planning_length=MBRLv1do5Config.PLANNING_LENGTH,
+            n_candidate_actions=MBRLv1do5Config.N_CANDIDATES_ACTIONS,
+            device=device,
+            verbose=config.VERBOSE,
+        )
 
-    #     agent, history = train_mbrlv1dot5(
-    #         agent=agent, 
-    #         checkpoint_folder=f'{experiment_folder}/{config.CHECKPOINT_FOLDER}',
-    #         history_folder=f'{experiment_folder}/{config.HISTORY_FOLDER}',
-    #     )
-    # elif args.method == 'mbpo':
-    #     print('Agent based on Model-Based Policy Optimization algorithm')
+        agent, history = train_mbrlv1dot5(
+            agent=agent, 
+            checkpoint_folder=f'{experiment_folder}/{config.CHECKPOINT_FOLDER}',
+            history_folder=f'{experiment_folder}/{config.HISTORY_FOLDER}',
+        )
+    elif args.method == 'mbpo':
+        print('Agent based on Model-Based Policy Optimization algorithm')
 
-    #     agent = MBPOAgent(
-    #         state_dim=config.STATE_DIM,
-    #         action_dim=config.ACTION_DIM,
-    #         hidden_dim=MBPOConfig.HIDDEN_DIM,
-    #         n_dyn_models=MBPOConfig.N_DYNAMICS_MODELS,
-    #         device=device,
-    #         verbose=config.VERBOSE,
-    #     )
+        agent = MBPOAgent(
+            state_dim=config.STATE_DIM,
+            action_dim=config.ACTION_DIM,
+            hidden_dim=MBPOConfig.HIDDEN_DIM,
+            n_dyn_models=MBPOConfig.N_DYNAMICS_MODELS,
+            device=device,
+            verbose=config.VERBOSE,
+        )
 
-    #     agent, history = train_mbpo(
-    #         agent=agent, 
-    #         checkpoint_folder=f'{experiment_folder}/{config.CHECKPOINT_FOLDER}',
-    #         history_folder=f'{experiment_folder}/{config.HISTORY_FOLDER}',
-    #     )
-
-    import pickle
-    with open('experiments/mbrlv1dot5/v9/checkpoint/agent_chkpt_6.pkl', 'rb') as f:
-        agent = pickle.load(f)
-
-    with open('experiments/mbrlv1dot5/v9/history/history_6.pkl', 'rb') as f:
-        history = pickle.load(f)
-
-    agent.env_dynamics_model = agent.env_dynamics_model.to(torch.device('cpu'))
-
-    save_checkpoint(agent, history, 6, 'experiments/mbrlv1dot5/v9/checkpoint', 'experiments/mbrlv1dot5/v9/history')
+        agent, history = train_mbpo(
+            agent=agent, 
+            checkpoint_folder=f'{experiment_folder}/{config.CHECKPOINT_FOLDER}',
+            history_folder=f'{experiment_folder}/{config.HISTORY_FOLDER}',
+        )
 
     make_history_plots(
         history=history,

@@ -30,16 +30,16 @@ class MBPOConfig:
     BATCH_SIZE                 = 64
     REPLAY_BUFFER_SIZE         = 100000
     N_EPOCHS                   = 125
-    N_EXPLORATION_STEPS        = 5000
+    N_EXPLORATION_STEPS        = 1000
     N_TRAINING_STEPS_PER_EPOCH = 1000
     N_POLICY_UPDATES           = 10
     N_DYNAMICS_MODEL_UPDATES   = 10
-    N_DYNAMICS_MODELS          = 7
-    REWARD_LOSS_WEIGHT         = 0.1
+    N_DYNAMICS_MODELS          = 10
+    REWARD_LOSS_WEIGHT         = 0.25
     DISCOUNT_FACTOR            = 0.99
     CRITIC_SOFT_UPDATE_FACTOR  = 0.995
-    AGENT_ROLLOUT_AMOUNT       = 200
-    AGENT_ROLLOUT_HORIZON      = 30
+    PLANNING_ROLLOUT_SIZE      = 100
+    PLANNING_LENGTH            = 10
 
 
 # ----------------
@@ -47,10 +47,10 @@ class MBPOConfig:
 # ----------------
 
 def add_planning_rollout_to_buffer(agent: MBPOAgent, env_replay_buffer: ReplayBuffer, planning_replay_buffer: ReplayBuffer):
-    states, _, _, _, _ = env_replay_buffer.sample(MBPOConfig.AGENT_ROLLOUT_AMOUNT)
+    states, _, _, _, _ = env_replay_buffer.sample(MBPOConfig.PLANNING_ROLLOUT_SIZE)
     states = states.to(agent.device)
     
-    for _ in range(MBPOConfig.AGENT_ROLLOUT_HORIZON):
+    for _ in range(MBPOConfig.PLANNING_LENGTH):
         with torch.no_grad():
             actions, _ = agent.choose_action(states)
             next_states, rewards = agent.predict_transition(states, actions)

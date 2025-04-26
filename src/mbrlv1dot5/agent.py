@@ -115,3 +115,8 @@ class MBRLv1dot5Agent:
             best_action = best_action.squeeze(0)
 
         return best_action.detach()
+    
+    def to_device(self, device: torch.device) -> 'MBRLv1dot5Agent':
+        self.device = device
+        self.env_dynamics_model = self.env_dynamics_model.to(device)
+        return self

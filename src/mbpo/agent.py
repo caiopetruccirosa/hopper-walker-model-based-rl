@@ -176,3 +176,11 @@ class MBPOAgent:
         log_probs = action_dist.log_prob(action).sum(dim=-1)
 
         return action, log_probs
+
+    def to_device(self, device: torch.device) -> 'MBPOAgent':
+        self.device = device
+        self.env_dynamics_model = self.env_dynamics_model.to(device)
+        self.actor = self.actor.to(device)
+        self.critic = self.critic.to(device)
+        self.target_critic = self.target_critic.to(device)
+        return self

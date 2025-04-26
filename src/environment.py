@@ -47,6 +47,7 @@ def play_recording_environment(env_name: str, agent: MBRLv1dot5Agent|MBPOAgent, 
     
     state, _ = env.reset()
     done = False
+
     while not done:
         state_pt = torch.FloatTensor(state).to(agent.device)
         if type(agent) is MBRLv1dot5Agent:
