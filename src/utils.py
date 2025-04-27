@@ -43,7 +43,7 @@ def save_checkpoint(
     os.makedirs(history_folder, exist_ok=True)
 
     agent = copy.deepcopy(agent)
-    agent = agent.to_device(torch.device('cpu'))
+    agent = agent.to_device(torch.device('cpu')) # type: ignore
 
     with open(f'{checkpoint_folder}/agent_chkpt_{checkpoint_idx}.pkl', 'wb') as f:
         pickle.dump(agent, f)
@@ -101,8 +101,9 @@ def make_plot(
     
     plt.figure(figsize=(10, 6))
 
-    if plot_rolling_avg:
-        window_size = len(values)//25
+    windows = 25
+    window_size = len(values)//windows
+    if plot_rolling_avg and window_size > 0:
         x = np.arange(len(values))
         
         series = pd.Series(values)

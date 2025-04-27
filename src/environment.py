@@ -4,7 +4,8 @@ import torch
 import os
 
 from gymnasium.wrappers import (
-    RecordEpisodeStatistics, 
+    RecordEpisodeStatistics,
+    NormalizeReward,
     RecordVideo,
 )
 from collections import deque
@@ -54,7 +55,7 @@ def play_recording_environment(env_name: str, agent: MBRLv1dot5Agent|MBPOAgent, 
             action = agent.choose_action(state_pt).cpu()
         elif type(agent) is MBPOAgent:
             action, _ = agent.choose_action(state_pt)
-            action = action.cpu()
+            action = action.detach().cpu()
         next_state, _, terminated, truncated, _ = env.step(action.numpy())
         done = terminated or truncated
         state = next_state
@@ -71,10 +72,11 @@ def make_env(env_name: str, healthy_reward: float, forward_reward_weight: float,
         healthy_reward=healthy_reward,
         forward_reward_weight=forward_reward_weight,
         ctrl_cost_weight=ctrl_cost_weight,
-        terminate_when_unhealthy=False,
+        terminate_when_unhealthy=(not is_recording),
         render_mode=render_mode,
     )
     env = RecordEpisodeStatistics(env) # adds episode statistics to env.step return values
+    env = NormalizeReward(env)
     return env
 
 def make_vectorized_env(env_name: str, n_envs: int, healthy_reward: float, forward_reward_weight: float, ctrl_cost_weight: float) -> gym.vector.SyncVectorEnv:

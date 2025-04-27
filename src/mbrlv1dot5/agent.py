@@ -72,6 +72,9 @@ class MBRLv1dot5Agent:
     def predict_transition(self, state: torch.Tensor, action: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         return self.env_dynamics_model(state, action)
 
+    def update_planning_length(self, planning_length: int):
+        self.planning_length = planning_length
+
     def choose_action(self, state: torch.Tensor) -> torch.Tensor:
         # check if state is batched
         not_batched = state.dim() == 1

@@ -22,23 +22,34 @@ from utils import (
 
 @dataclass
 class MBRLv1do5Config:
-    HIDDEN_DIM                = 128
-    DYNAMICS_LR               = 1e-4
-    BATCH_SIZE                = 128
-    N_DYNAMICS_MODEL_UPDATES  = 10
-    N_EXPLORATION_EPISODES    = 100
-    N_EPISODES                = 500
-    DYNAMICS_UPDATE_FREQUENCY = 500
-    REPLAY_BUFFER_SIZE        = 100000
-    N_CANDIDATES_ACTIONS      = 400
-    PLANNING_LENGTH           = 10
-    REWARD_LOSS_WEIGHT        = 0.25
-    WEIGHT_DECAY              = 1e-7
+    HIDDEN_DIM                    = 256
+    DYNAMICS_LR                   = 3e-5
+    BATCH_SIZE                    = 128
+    N_DYNAMICS_MODEL_UPDATES      = 10
+    N_EXPLORATION_EPISODES        = 100
+    N_EPISODES                    = 1000
+    DYNAMICS_UPDATE_FREQUENCY     = 25
+    REPLAY_BUFFER_SIZE            = 1000000
+    N_CANDIDATES_ACTIONS          = 400
+    MIN_PLANNING_LENGTH           = 1
+    MAX_PLANNING_LENGTH           = 10
+    EPISODE_START_PLANNING_GROWTH = 100
+    EPISODE_END_PLANNING_GROWTH   = 700
+    REWARD_LOSS_WEIGHT            = 0.5
+    WEIGHT_DECAY                  = 0
 
 
 # ----------------
 # Training Process
 # ----------------
+
+def calculate_planning_length(episode: int) -> int:
+    planning_length_interval = MBRLv1do5Config.MAX_PLANNING_LENGTH - MBRLv1do5Config.MIN_PLANNING_LENGTH
+    episodes_interval = MBRLv1do5Config.EPISODE_END_PLANNING_GROWTH - MBRLv1do5Config.EPISODE_START_PLANNING_GROWTH
+    current_episode_offset = episode - MBRLv1do5Config.EPISODE_START_PLANNING_GROWTH
+    ratio = current_episode_offset/episodes_interval
+    return min(max(int(MBRLv1do5Config.MIN_PLANNING_LENGTH + ratio*planning_length_interval), MBRLv1do5Config.MIN_PLANNING_LENGTH), MBRLv1do5Config.MAX_PLANNING_LENGTH)
+
 
 def train(agent: MBRLv1dot5Agent, checkpoint_folder: str, history_folder: str):
     if config.VERBOSE:
@@ -47,7 +58,7 @@ def train(agent: MBRLv1dot5Agent, checkpoint_folder: str, history_folder: str):
     history = create_history(
         attributes=[
             ('episode_reward_vs_num_episodes', 'Episode Reward', 'Number of Episodes', True),
-            ('episode_length_vs_num_episodes', 'Episode Length', 'Number of Episodes', False),
+            ('episode_length_vs_num_episodes', 'Episode Length', 'Number of Episodes', True),
             ('state_dynamics_loss_vs_num_dynupdate_steps', 'Agent\'s Dynamics Model State Loss', 'Number of Update Steps', False),
             ('reward_dynamics_loss_vs_num_dynupdate_steps', 'Agent\'s Dynamics Model Reward Loss', 'Number of Update Steps', False),
             ('total_dynamics_loss_vs_num_dynupdate_steps', 'Agent\'s Dynamics Model Total Loss', 'Number of Update Steps', False),
@@ -108,6 +119,7 @@ def train(agent: MBRLv1dot5Agent, checkpoint_folder: str, history_folder: str):
         episodes_length += 1
         states_pt = torch.FloatTensor(states)
 
+        agent.update_planning_length(calculate_planning_length(episodes_completed))
         actions = agent.choose_action(states_pt.to(device)).cpu()
         next_states, rewards, terminateds, truncateds, _ = envs.step(actions.numpy())
         dones = np.logical_or(terminateds, truncateds)
@@ -124,7 +136,7 @@ def train(agent: MBRLv1dot5Agent, checkpoint_folder: str, history_folder: str):
         states = next_states
         episodes_acc_reward += rewards
 
-        # process finished episodes and train policy with REINFORCE
+        # process finished episodes
         if sum(dones) > 0:
             episodes_completed += sum(dones)
             if config.VERBOSE:
@@ -158,8 +170,8 @@ def train(agent: MBRLv1dot5Agent, checkpoint_folder: str, history_folder: str):
                 add_to_history(history, 'total_dynamics_loss_vs_num_dynupdate_steps', dyn_loss.item())
 
         # save agent and history checkpoint
-        if episodes_completed//config.CHECKPOINT_EPISODE_FREQUENCY > checkpoint_idx:
-            checkpoint_idx = episodes_completed//config.CHECKPOINT_EPISODE_FREQUENCY
+        if episodes_completed//config.CHECKPOINT_FREQUENCY > checkpoint_idx:
+            checkpoint_idx = episodes_completed//config.CHECKPOINT_FREQUENCY
             save_checkpoint(agent, history, checkpoint_idx, checkpoint_folder, history_folder)
 
         pbar.update(sum(dones))

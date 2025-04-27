@@ -48,7 +48,7 @@ def main():
             state_dim=config.STATE_DIM,
             action_dim=config.ACTION_DIM,
             hidden_dim=MBRLv1do5Config.HIDDEN_DIM,
-            planning_length=MBRLv1do5Config.PLANNING_LENGTH,
+            planning_length=MBRLv1do5Config.MIN_PLANNING_LENGTH,
             n_candidate_actions=MBRLv1do5Config.N_CANDIDATES_ACTIONS,
             device=device,
             verbose=config.VERBOSE,
